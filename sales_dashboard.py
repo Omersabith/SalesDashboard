@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
 st.set_page_config(layout="wide")
 
@@ -56,8 +57,10 @@ channel_filter = col4.multiselect(
 )
 
 # --- Apply date filter ---
-filtered_df = df[(df["Date"] >= pd.to_datetime(start_date)) &
-                 (df["Date"] <= pd.to_datetime(end_date))]
+filtered_df = df[
+    (df["Date"] >= pd.to_datetime(start_date)) &
+    (df["Date"] <= pd.to_datetime(end_date))
+]
 
 # --- Apply type filter ---
 if type_filter != "BOTH":
