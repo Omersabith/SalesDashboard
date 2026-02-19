@@ -128,7 +128,7 @@ if not filtered_df.empty:
         barmode="group",
         title="Revenue & Returns by Month",
         labels={"Value": "Amount (OMR)", "Month": "Month of Year"},
-        color_discrete_map={"SALE": "#00CC96", "RETURN": "#EF553B"}
+        color_discrete_map={"SALE": "#017016", "RETURN": "#99060B"}
     )
     
     # Formatting X-Axis to show Month names
