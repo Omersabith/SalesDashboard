@@ -32,15 +32,15 @@ def load_data():
     df["Value"] = pd.to_numeric(df["Value"], errors="coerce").fillna(0)
     df["Qty"] = pd.to_numeric(df.get("Qty", 0), errors="coerce").fillna(0)
 
-    # 🔴 Force returns to be negative
+    # 🔴 Force returns to be negative for accurate revenue calculation
     df.loc[df["Type"] == "RETURN", "Value"] = -df.loc[df["Type"] == "RETURN", "Value"].abs()
 
-    # --- Date Parsing (DD/MM/YYYY) ---
+    # --- Date Parsing (FIXED FOR DD/MM/YYYY) ---
+    # dayfirst=True ensures "09/01/2025" is read as Sept 1st, not Jan 9th.
     df["Date"] = pd.to_datetime(df["Date"], dayfirst=True, errors="coerce")
     df = df.dropna(subset=["Date"])
 
-    # --- Create Month-Year column for the trend graph ---
-    # We use periods or floor dates so the graph stays in chronological order
+    # --- Create a Month-Year timestamp for the trend graph ---
     df["Month"] = df["Date"].dt.to_period("M").dt.to_timestamp()
 
     return df
@@ -51,25 +51,25 @@ if df.empty:
     st.stop()
 
 # =========================
-# GLOBAL FILTERS (Expanded)
+# GLOBAL FILTERS (All requested filters)
 # =========================
 st.title("📊 Sales Dashboard")
 
-# Create two rows of filters for better UI
+# Filter Layout (Two rows)
 f_row1 = st.columns(4)
 f_row2 = st.columns(4)
 
-# Row 1
+# Row 1 Filters
 start_date = f_row1[0].date_input("Start Date", df["Date"].min())
 end_date = f_row1[1].date_input("End Date", df["Date"].max())
 type_filter = f_row1[2].selectbox("Type", ["BOTH", "SALE", "RETURN"])
-channel_filter = f_row1[3].multiselect("Channel", sorted(df["Channel"].unique()))
+channel_filter = f_row1[3].multiselect("Channel", sorted(df["Channel"].dropna().unique()))
 
-# Row 2 (Added Category, SubCat, Salesman, and PartNo filters)
-cat_filter = f_row2[0].multiselect("Category", sorted(df["Category"].unique()))
-subcat_filter = f_row2[1].multiselect("Sub Category", sorted(df["SubCategory"].unique()))
-salesman_filter = f_row2[2].multiselect("Sales Executive", sorted(df["Salesman"].unique()))
-part_filter = f_row2[3].multiselect("Part Number", sorted(df["PartNo"].unique()))
+# Row 2 Filters
+salesman_filter = f_row2[0].multiselect("Sales Executive", sorted(df["Salesman"].dropna().unique()))
+cat_filter = f_row2[1].multiselect("Category", sorted(df["Category"].dropna().unique()))
+subcat_filter = f_row2[2].multiselect("Sub Category", sorted(df["SubCategory"].dropna().unique()))
+part_filter = f_row2[3].multiselect("Part Number", sorted(df["PartNo"].dropna().unique()))
 
 # --- Apply All Filters ---
 mask = (df["Date"] >= pd.to_datetime(start_date)) & (df["Date"] <= pd.to_datetime(end_date))
@@ -78,12 +78,12 @@ if type_filter != "BOTH":
     mask &= (df["Type"] == type_filter)
 if channel_filter:
     mask &= (df["Channel"].isin(channel_filter))
+if salesman_filter:
+    mask &= (df["Salesman"].isin(salesman_filter))
 if cat_filter:
     mask &= (df["Category"].isin(cat_filter))
 if subcat_filter:
     mask &= (df["SubCategory"].isin(subcat_filter))
-if salesman_filter:
-    mask &= (df["Salesman"].isin(salesman_filter))
 if part_filter:
     mask &= (df["PartNo"].isin(part_filter))
 
@@ -107,39 +107,40 @@ k3.metric("Return Value", f"OMR {return_value:,.2f}")
 k4.metric("Sale Volume", f"{sales_volume:,.0f}")
 
 # =========================
-# NEW: MONTHLY PERFORMANCE TREND
+# MONTHLY PERFORMANCE TREND (Bar Color Changed)
 # =========================
 st.markdown("---")
 st.subheader("📈 Monthly Performance Trend")
 
 if not filtered_df.empty:
-    # Group by Month and Type to see Sales vs Returns over time
+    # Group by Month and Type
     monthly_trend = filtered_df.groupby(["Month", "Type"])["Value"].sum().reset_index()
-    
-    # Sort by date so the graph flows correctly
     monthly_trend = monthly_trend.sort_values("Month")
     
-    # Create the chart
+    # Create the chart with NEW COLORS
+    # Teal for Sales, Tomato for Returns
     fig_trend = px.bar(
         monthly_trend, 
         x="Month", 
         y="Value", 
         color="Type",
         barmode="group",
-        title="Revenue & Returns by Month",
-        labels={"Value": "Amount (OMR)", "Month": "Month of Year"},
-        color_discrete_map={"SALE": "#017016", "RETURN": "#99060B"}
+        labels={"Value": "Amount (OMR)", "Month": "Time Period"},
+        color_discrete_map={
+            "SALE": "#008080",    # Teal
+            "RETURN": "#FF6347"   # Tomato/Red
+        }
     )
     
-    # Formatting X-Axis to show Month names
     fig_trend.update_xaxes(dtick="M1", tickformat="%b %Y")
+    fig_trend.update_layout(hovermode="x unified")
     
     st.plotly_chart(fig_trend, use_container_width=True)
 else:
-    st.warning("No data found for the current filters.")
+    st.warning("No data found for the current filter selection.")
 
 # =========================
-# CHARTS ROW (Share)
+# DISTRIBUTION CHARTS
 # =========================
 st.markdown("---")
 c1, c2 = st.columns(2)
@@ -147,17 +148,19 @@ chart_data = filtered_df.copy()
 chart_data["AbsValue"] = chart_data["Value"].abs()
 
 if not chart_data.empty:
-    fig_cat = px.pie(chart_data, values="AbsValue", names="Category", hole=0.5, title="Category Share")
+    fig_cat = px.pie(chart_data, values="AbsValue", names="Category", hole=0.5, 
+                     title="Category Distribution", color_discrete_sequence=px.colors.qualitative.Safe)
     c1.plotly_chart(fig_cat, use_container_width=True)
 
-    fig_ch = px.pie(chart_data, values="AbsValue", names="Channel", hole=0.5, title="Channel Share")
+    fig_ch = px.pie(chart_data, values="AbsValue", names="Channel", hole=0.5, 
+                    title="Channel Distribution", color_discrete_sequence=px.colors.qualitative.Pastel)
     c2.plotly_chart(fig_ch, use_container_width=True)
 
 # =========================
-# FAST MOVING SKU
+# FAST MOVING SKU (Top 10)
 # =========================
 st.markdown("---")
-st.subheader("🔥 Top 10 Fast Moving SKU (Based on Selected Filters)")
+st.subheader("🔥 Top 10 Fast Moving SKU")
 fast_sku = (
     filtered_df[filtered_df["Type"] == "SALE"]
     .groupby(["PartNo", "Category", "SubCategory"])["Qty"]
